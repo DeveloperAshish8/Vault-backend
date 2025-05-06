@@ -6,6 +6,7 @@ import {
   getAllAssets,
   getAssetsById,
   getDownloadLink,
+  serveFileWithToken,
   updateAsset,
   uploadFile,
 } from "../controllers/asset.controller";
@@ -29,5 +30,6 @@ route.get("/:id", verifyJWT, getAssetsById);
 route.put("/:id", verifyJWT, updateAsset);
 route.delete("/:id", verifyJWT, deleteAsset);
 route.get("/download/:id", verifyJWT, getDownloadLink);
+route.get("/download/file/:token", serveFileWithToken);
 
 export default route;

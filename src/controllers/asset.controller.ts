@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { ApiError } from "../utils/ApiError";
+import * as jwt from "jsonwebtoken";
 import {
   deleteAssetFromCloudinary,
   generateSignedUrl,
@@ -10,6 +11,7 @@ import { IUser } from "../models/user.model";
 import { ApiResponse } from "../utils/ApiResponse";
 import mongoose from "mongoose";
 import { v2 as cloudinary } from "cloudinary";
+import { generateDownloadToken } from "../utils/downloadToken";
 
 const uploadFile = async (req: Request, res: Response) => {
   const userId = (req as Request & { user: IUser }).user._id;
@@ -148,22 +150,48 @@ const getDownloadLink = async (req: Request, res: Response) => {
     }
   }
 
-  const expiry = Math.floor(Date.now() / 1000) * 3600; // 1 hour
+  let downloadUrl = asset.url;
+  let expiresAt: string | null = null;
 
-  const signedUrl = generateSignedUrl(String(asset.publicId));
+  if (asset.isPrivate) {
+    const token = generateDownloadToken(asset._id.toString(), 3600);
+    downloadUrl = `${process.env.BASE_URL}/api/v1/assets/download/file/${token}`;
+    const expiry = new Date(Date.now() + 3600 * 1000);
+    expiresAt = expiry.toISOString();
+  }
 
   res.status(200).json(
     new ApiResponse(
       200,
       {
-        downloadUrl: asset.isPrivate ? signedUrl : asset.url,
-        expiresAt: asset.isPrivate
-          ? new Date(expiry * 1000).toISOString()
-          : null,
+        downloadUrl: asset.isPrivate ? downloadUrl : asset.url,
+        expiresAt: asset.isPrivate ? expiresAt : null,
       },
       "Download link generated"
     )
   );
+};
+
+const serveFileWithToken = async (req: Request, res: Response) => {
+  const { token } = req.params;
+
+  try {
+    const decoded = jwt.verify(
+      token,
+      process.env.DOWNLOAD_SECRET || "default_secret"
+    ) as {
+      assetId: string;
+    };
+
+    const asset = await assetModel.findById(decoded.assetId);
+    if (!asset) {
+      throw new ApiError(404, "Asset not found");
+    }
+
+    res.redirect(String(asset.url)); // redirect to actual cloudinary URL
+  } catch (error) {
+    throw new ApiError(404, "Invalid or expired download link");
+  }
 };
 
 export {
@@ -173,4 +201,5 @@ export {
   updateAsset,
   deleteAsset,
   getDownloadLink,
+  serveFileWithToken,
 };

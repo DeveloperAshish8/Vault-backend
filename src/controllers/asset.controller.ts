@@ -47,7 +47,6 @@ const uploadFile = async (req: Request, res: Response) => {
     publicId: asset.public_id,
     version: newVersion,
     tags: req.body.tags || [],
-    isPrivate: req.body.isPrivate || false,
   });
 
   res
@@ -85,27 +84,27 @@ const getAssetsById = async (req: Request, res: Response) => {
 
 const updateAsset = async (req: Request, res: Response) => {
   const id = req.params.id;
-  const { tags, user, isPrivate } = req.body;
 
   if (!mongoose.Types.ObjectId.isValid(id)) {
     throw new ApiError(400, "Invalid ID");
   }
 
-  if (!tags || !user || typeof isPrivate != "boolean") {
-    throw new ApiError(500, "Missing Fields");
+  const updateFields: any = {};
+  const { tags, user, isPrivate } = req.body;
+
+  if (tags) updateFields.tags = tags;
+  if (user) updateFields.allowedUsers = user;
+  if (typeof isPrivate === "boolean") updateFields.isPrivate = isPrivate;
+
+  if (Object.keys(updateFields).length === 0) {
+    throw new ApiError(400, "No valid fields provided for update");
   }
 
-  const Asset = await assetModel.findOneAndUpdate(
-    { _id: id },
-    {
-      tags: tags,
-      allowedUsers: user,
-      isPrivate: isPrivate,
-    },
-    { new: true }
-  );
+  const updatedAsset = await assetModel.findByIdAndUpdate(id, updateFields, {
+    new: true,
+  });
 
-  res.status(201).json(new ApiResponse(201, Asset, "Update Success"));
+  res.status(201).json(new ApiResponse(201, updatedAsset, "Update Success"));
 };
 
 const deleteAsset = async (req: Request, res: Response) => {
@@ -154,7 +153,7 @@ const getDownloadLink = async (req: Request, res: Response) => {
   let expiresAt: string | null = null;
 
   if (asset.isPrivate) {
-    const token = generateDownloadToken(asset._id.toString(), 3600);
+    const token = generateDownloadToken(asset._id.toString(), 3600 * 1000);
     downloadUrl = `${process.env.BASE_URL}/api/v1/assets/download/file/${token}`;
     const expiry = new Date(Date.now() + 3600 * 1000);
     expiresAt = expiry.toISOString();
@@ -174,6 +173,7 @@ const getDownloadLink = async (req: Request, res: Response) => {
 
 const serveFileWithToken = async (req: Request, res: Response) => {
   const { token } = req.params;
+  console.log(token);
 
   try {
     const decoded = jwt.verify(
@@ -183,12 +183,29 @@ const serveFileWithToken = async (req: Request, res: Response) => {
       assetId: string;
     };
 
+    console.log(decoded.assetId);
+
     const asset = await assetModel.findById(decoded.assetId);
+    console.log(asset);
+
     if (!asset) {
       throw new ApiError(404, "Asset not found");
     }
+    const updatedDownloadCount = asset?.downloads + 1;
+    const updatedAsset = await assetModel.findByIdAndUpdate(
+      decoded.assetId,
+      {
+        downloads: updatedDownloadCount + 1,
+      },
+      { new: true }
+    );
 
-    res.redirect(String(asset.url)); // redirect to actual cloudinary URL
+    if (!updatedAsset) {
+      throw new ApiError(400, "Something went wrong");
+    }
+    console.log(updatedAsset);
+
+    res.redirect(String(updatedAsset.url)); // redirect to actual cloudinary URL
   } catch (error) {
     throw new ApiError(404, "Invalid or expired download link");
   }

@@ -15,6 +15,7 @@ import { generateDownloadToken } from "../utils/downloadToken";
 
 const uploadFile = async (req: Request, res: Response) => {
   const userId = (req as Request & { user: IUser }).user._id;
+  const fileName = req.body.fileName;
   const fileLocalPath = (
     req.files as { [fieldname: string]: Express.Multer.File[] }
   )?.asset[0]?.path;
@@ -24,7 +25,6 @@ const uploadFile = async (req: Request, res: Response) => {
   }
 
   const asset = await uploadOnCloudinary(fileLocalPath);
-  // console.log(asset);
 
   if (!asset) {
     throw new ApiError(400, "Error in uploading file");
@@ -41,7 +41,7 @@ const uploadFile = async (req: Request, res: Response) => {
   const newVersion = existingAsset ? existingAsset.version + 1 : 1;
 
   const newAsset = await assetModel.create({
-    title: originalFileName,
+    title: fileName || originalFileName,
     owner: userId,
     url: asset.url,
     publicId: asset.public_id,
@@ -211,6 +211,49 @@ const serveFileWithToken = async (req: Request, res: Response) => {
   }
 };
 
+const addAllowedUsers = async (req: Request, res: Response) => {
+  const assetId = req.params.id;
+  const userToAdd = req.body.userId;
+  const userId = (req as Request & { user: IUser }).user._id;
+
+  if (
+    !mongoose.Types.ObjectId.isValid(assetId) &&
+    !mongoose.Types.ObjectId.isValid(userToAdd)
+  ) {
+    throw new ApiError(400, "Invalid Asset or user ID");
+  }
+
+  const asset = await assetModel.findById(assetId);
+  if (!asset) {
+    throw new ApiError(404, "Asset not found");
+  }
+
+  if (!asset.owner || !userId) {
+    throw new ApiError(400, "Asset owner or user not found");
+  }
+
+  if (asset.owner.toString() !== userId.toString()) {
+    throw new ApiError(403, "Not Allowed to modify asset settings");
+  }
+
+  if (asset.allowedUsers.includes(userToAdd)) {
+    throw new ApiError(400, "User Already allowed for this Asset");
+  }
+
+  asset.allowedUsers.push(userToAdd);
+  await asset.save();
+
+  res
+    .status(201)
+    .json(
+      new ApiResponse(
+        201,
+        { "Allowed User": asset.allowedUsers },
+        "Update Success"
+      )
+    );
+};
+
 export {
   uploadFile,
   getAllAssets,
@@ -219,4 +262,5 @@ export {
   deleteAsset,
   getDownloadLink,
   serveFileWithToken,
+  addAllowedUsers,
 };

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { upload } from "../middlewares/multer.middleware";
 import { verifyJWT } from "../middlewares/auth.middleware";
 import {
+  addAllowedUsers,
   deleteAsset,
   getAllAssets,
   getAssetsById,
@@ -31,5 +32,6 @@ route.put("/:id", verifyJWT, updateAsset);
 route.delete("/:id", verifyJWT, deleteAsset);
 route.get("/download/:id", verifyJWT, getDownloadLink);
 route.get("/download/file/:token", serveFileWithToken);
+route.post("/:id/allow-user", verifyJWT, addAllowedUsers);
 
 export default route;

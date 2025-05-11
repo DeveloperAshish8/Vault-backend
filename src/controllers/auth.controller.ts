@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { ApiError } from "../utils/ApiError";
 import { IUser, User } from "../models/user.model";
 import { ApiResponse } from "../utils/ApiResponse";
+import * as jwt from "jsonwebtoken";
 
 const generateAccessAndRefreshTokens = async (
   userId: string

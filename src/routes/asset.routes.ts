@@ -7,6 +7,7 @@ import {
   getAllAssets,
   getAssetsById,
   getDownloadLink,
+  removeAllowedUsers,
   serveFileWithToken,
   updateAsset,
   uploadFile,
@@ -33,5 +34,6 @@ route.delete("/:id", verifyJWT, deleteAsset);
 route.get("/download/:id", verifyJWT, getDownloadLink);
 route.get("/download/file/:token", serveFileWithToken);
 route.post("/:id/allow-user", verifyJWT, addAllowedUsers);
+route.post("/:id/remove-user", verifyJWT, removeAllowedUsers);
 
 export default route;

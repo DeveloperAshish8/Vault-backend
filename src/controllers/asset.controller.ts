@@ -58,10 +58,20 @@ const getAllAssets = async (req: Request, res: Response) => {
   try {
     const userId = (req as Request & { user: IUser }).user._id;
     const Assets = await assetModel.find({ owner: userId });
+    const sharedAsset = await assetModel.find({
+      allowedUsers: userId,
+      owner: { $ne: userId },
+    });
 
     res
       .status(201)
-      .json(new ApiResponse(201, Assets, "Assets fetched Successfully"));
+      .json(
+        new ApiResponse(
+          201,
+          { UserAsset: Assets, sharedAsset: sharedAsset },
+          "Assets fetched Successfully"
+        )
+      );
   } catch (error) {
     throw new ApiError(404, "Something went wrong in data fetching");
   }
@@ -90,10 +100,9 @@ const updateAsset = async (req: Request, res: Response) => {
   }
 
   const updateFields: any = {};
-  const { tags, user, isPrivate } = req.body;
+  const { tags, isPrivate } = req.body;
 
   if (tags) updateFields.tags = tags;
-  if (user) updateFields.allowedUsers = user;
   if (typeof isPrivate === "boolean") updateFields.isPrivate = isPrivate;
 
   if (Object.keys(updateFields).length === 0) {
@@ -253,6 +262,41 @@ const addAllowedUsers = async (req: Request, res: Response) => {
       )
     );
 };
+const removeAllowedUsers = async (req: Request, res: Response) => {
+  const assetId = req.params.id;
+  const userToRemove = req.body.userId;
+  const userId = (req as Request & { user: IUser }).user._id;
+
+  if (
+    !mongoose.Types.ObjectId.isValid(assetId) &&
+    !mongoose.Types.ObjectId.isValid(userToRemove)
+  ) {
+    throw new ApiError(400, "Invalid Asset or user ID");
+  }
+
+  const asset = await assetModel.findById(assetId);
+  if (!asset) {
+    throw new ApiError(404, "Asset not found");
+  }
+
+  if (!asset.owner || !userId) {
+    throw new ApiError(400, "Asset owner or user not found");
+  }
+
+  if (asset.owner.toString() !== userId.toString()) {
+    throw new ApiError(403, "Not Allowed to modify asset settings");
+  }
+
+  if (!asset.allowedUsers.includes(userToRemove)) {
+    throw new ApiError(400, "User Already not allowed for this Asset");
+  }
+
+  await assetModel.updateOne(
+    { _id: assetId },
+    { $pull: { allowedUsers: userToRemove } }
+  );
+  res.status(201).json(new ApiResponse(201, {}, "Update Success"));
+};
 
 export {
   uploadFile,
@@ -263,4 +307,5 @@ export {
   getDownloadLink,
   serveFileWithToken,
   addAllowedUsers,
+  removeAllowedUsers,
 };
